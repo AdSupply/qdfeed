@@ -18,7 +18,7 @@ namespace QDFeedParser
 		/// </summary>
 		/// <param name="feeduri">The Uri which uniquely identifies the feed</param>
 		public Rss092Feed(string feeduri)
-			: base(feeduri, FeedType.Rss20)
+			: base(feeduri, FeedType.Rss092)
 		{
 		}
 
