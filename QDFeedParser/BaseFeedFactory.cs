@@ -89,13 +89,18 @@ namespace QDFeedParser
             try
             {
                 IFeed returnFeed;
-                if (feedtype == FeedType.Atom10)
+                switch (feedtype)
                 {
-                    returnFeed = _instanceProvider.CreateAtom10Feed(feeduri.OriginalString);
-                }
-                else
-                {
-                    returnFeed = _instanceProvider.CreateRss20Feed(feeduri.OriginalString);
+	                case FeedType.Atom10:
+		                returnFeed = _instanceProvider.CreateAtom10Feed(feeduri.OriginalString);
+		                break;
+	                case FeedType.Rss092:
+		                returnFeed = _instanceProvider.CreateRss092Feed(feeduri.OriginalString);
+		                break;
+					case FeedType.Rss20:
+	                default:
+		                returnFeed = _instanceProvider.CreateRss20Feed(feeduri.OriginalString);
+		                break;
                 }
 
                 try

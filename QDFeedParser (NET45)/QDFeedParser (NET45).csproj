@@ -85,6 +85,12 @@
     <Compile Include="..\QDFeedParser\QDFeedExceptions.cs">
       <Link>QDFeedExceptions.cs</Link>
     </Compile>
+    <Compile Include="..\QDFeedParser\Rss092Feed.cs">
+      <Link>Rss092Feed.cs</Link>
+    </Compile>
+    <Compile Include="..\QDFeedParser\Rss092FeedItem.cs">
+      <Link>Rss092FeedItem.cs</Link>
+    </Compile>
     <Compile Include="..\QDFeedParser\Rss20Feed.cs">
       <Link>Rss20Feed.cs</Link>
     </Compile>

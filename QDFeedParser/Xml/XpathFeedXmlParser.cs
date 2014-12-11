@@ -6,197 +6,294 @@ using System.Text;
 
 namespace QDFeedParser.Xml
 {
-    public class XPathFeedXmlParser : FeedXmlParserBase
-    {
-        #region IFeedXmlParser Members
+	public class XPathFeedXmlParser : FeedXmlParserBase
+	{
+		#region IFeedXmlParser Members
 
-        public override void ParseFeed(IFeed feed, string xml)
-        {
-            switch (feed.FeedType)
-            {
-                case FeedType.Rss20:
-                    var rssFeed = feed as Rss20Feed;
-                    ParseRss20Header(rssFeed, xml);
-                    ParseRss20Items(rssFeed, xml);
-                    break;
-                case FeedType.Atom10:
-                    var atomFeed = feed as Atom10Feed;
-                    ParseAtom10Header(atomFeed, xml);
-                    ParseAtom10Items(atomFeed, xml);
-                    break;
-            }
-        }
-        
-        public override FeedType CheckFeedType(string feedxml)
-        {
-            var doc = new XmlDocument();
-            doc.LoadXml(feedxml);
-            var xmlRootElement = doc.DocumentElement;
-            if (xmlRootElement.Name.Contains(RssRootElementName) && xmlRootElement.GetAttribute(RssVersionAttributeName) == "2.0")
-                return FeedType.Rss20;
-            else if (xmlRootElement.Name.Contains(AtomRootElementName))
-                return FeedType.Atom10;
-            else
-                throw new InvalidFeedXmlException("Unable to determine feedtype (but was able to parse file) for feed");
-        }
+		public override void ParseFeed(IFeed feed, string xml)
+		{
+			switch (feed.FeedType)
+			{
+				case FeedType.Rss20:
+					var rssFeed = feed as Rss20Feed;
+					ParseRss20Header(rssFeed, xml);
+					ParseRss20Items(rssFeed, xml);
+					break;
+				case FeedType.Atom10:
+					var atomFeed = feed as Atom10Feed;
+					ParseAtom10Header(atomFeed, xml);
+					ParseAtom10Items(atomFeed, xml);
+					break;
 
-        #endregion
+				case FeedType.Rss092:
+					var rss092Feed = feed as Rss092Feed;
+					ParseRss092Header(rss092Feed, xml);
+					ParseRss092Items(rss092Feed, xml);
+					break;
+			}
+		}
 
-        #region Atom 1.0 parsing methods
+		public override FeedType CheckFeedType(string feedxml)
+		{
+			var doc = new XmlDocument();
+			doc.LoadXml(feedxml);
+			var xmlRootElement = doc.DocumentElement;
+			if (xmlRootElement.Name.Contains(RssRootElementName) && xmlRootElement.GetAttribute(RssVersionAttributeName) == "2.0")
+			{
+				return FeedType.Rss20;
+			}
 
-        private XmlNamespaceManager NsManager;
+			if (xmlRootElement.Name.Contains(RssRootElementName) && xmlRootElement.GetAttribute(RssVersionAttributeName) == "0.92")
+			{
+				return FeedType.Rss092;
+			}
 
-        private void ParseAtom10Header(Atom10Feed atomFeed, string xml)
-        {
-            var xmlDoc = new XmlDocument();
-            xmlDoc.LoadXml(xml);
+			if (xmlRootElement.Name.Contains(AtomRootElementName))
+			{
+				return FeedType.Atom10;
+			}
 
-            //Initialize our namespace manager.
-            NsManager = new XmlNamespaceManager(xmlDoc.NameTable);
-            NsManager.AddNamespace("atom", "http://www.w3.org/2005/Atom");
+			throw new InvalidFeedXmlException("Unable to determine feedtype (but was able to parse file) for feed");
+		}
 
-            var titleNode = xmlDoc.SelectSingleNode("/atom:feed/atom:title", NsManager);
-            atomFeed.Title = titleNode.InnerText;
+		#endregion
 
-            var linkNode = xmlDoc.SelectSingleNode("/atom:feed/atom:link[not(@rel)]/@href", NsManager) ??
-                           xmlDoc.SelectSingleNode("/atom:feed/atom:author/atom:uri", NsManager) ??
-                           xmlDoc.SelectSingleNode("/atom:feed/atom:link[@rel='alternate']/@href", NsManager);
+		#region Atom 1.0 parsing methods
 
-            atomFeed.Link = linkNode == null ? string.Empty : linkNode.InnerText;
+		private XmlNamespaceManager NsManager;
 
-            var dateTimeNode = xmlDoc.SelectSingleNode("/atom:feed/atom:updated", NsManager);
+		private void ParseAtom10Header(Atom10Feed atomFeed, string xml)
+		{
+			var xmlDoc = new XmlDocument();
+			xmlDoc.LoadXml(xml);
 
-            DateTime timeOut;
-            DateTime.TryParse(dateTimeNode.InnerText, out timeOut);
-            atomFeed.LastUpdated = timeOut.ToUniversalTime();
+			//Initialize our namespace manager.
+			NsManager = new XmlNamespaceManager(xmlDoc.NameTable);
+			NsManager.AddNamespace("atom", "http://www.w3.org/2005/Atom");
 
-            var generatorNode = xmlDoc.SelectSingleNode("/atom:feed/atom:generator", NsManager);
-            atomFeed.Generator = generatorNode == null ? string.Empty : generatorNode.InnerText;
-        }
+			var titleNode = xmlDoc.SelectSingleNode("/atom:feed/atom:title", NsManager);
+			atomFeed.Title = titleNode.InnerText;
 
-        private void ParseAtom10Items(IFeed feed, string xml)
-        {
-            var xmlDoc = new XmlDocument();
-            xmlDoc.LoadXml(xml);
-            var feedItemNodes = xmlDoc.SelectNodes("/atom:feed/atom:entry", NsManager);
-            foreach(XmlNode node in feedItemNodes)
-            {
-                feed.Items.Add(ParseAtom10SingleItem(node));
-            }
-        }
+			var linkNode = xmlDoc.SelectSingleNode("/atom:feed/atom:link[not(@rel)]/@href", NsManager) ??
+						   xmlDoc.SelectSingleNode("/atom:feed/atom:author/atom:uri", NsManager) ??
+						   xmlDoc.SelectSingleNode("/atom:feed/atom:link[@rel='alternate']/@href", NsManager);
 
-        private BaseFeedItem ParseAtom10SingleItem(XmlNode itemNode)
-        {
-            var titleNode = itemNode.SelectSingleNode("atom:title", NsManager);
-            var datePublishedNode = itemNode.SelectSingleNode("atom:updated", NsManager);
-            var authorNode = itemNode.SelectSingleNode("atom:author/name", NsManager);
-            var idNode = itemNode.SelectSingleNode("atom:id", NsManager);
-            var contentNode = itemNode.SelectSingleNode("atom:content", NsManager);
-            var linkNode = itemNode.SelectSingleNode("atom:link/@href", NsManager);
+			atomFeed.Link = linkNode == null ? string.Empty : linkNode.InnerText;
 
-            BaseFeedItem item = new Atom10FeedItem
-            {
-                Title = titleNode == null ? string.Empty : titleNode.InnerText,
-                DatePublished = datePublishedNode == null ? DateTime.UtcNow : SafeGetDate(datePublishedNode.InnerText),
-                Author = authorNode == null ? string.Empty : authorNode.InnerText,
-                Id = idNode == null ? string.Empty : idNode.InnerText,
-                Content = contentNode == null ? string.Empty : contentNode.InnerText,
-                Link = linkNode == null ? string.Empty : linkNode.InnerText
-            };
+			var dateTimeNode = xmlDoc.SelectSingleNode("/atom:feed/atom:updated", NsManager);
 
-            var categoryNodes = itemNode.SelectNodes("atom:category/atom:term", NsManager);
-            if (categoryNodes != null)
-            {
-                foreach (XmlNode categoryNode in categoryNodes)
-                {
-                    item.Categories.Add(categoryNode.InnerText);
-                }
-            }
+			DateTime timeOut;
+			DateTime.TryParse(dateTimeNode.InnerText, out timeOut);
+			atomFeed.LastUpdated = timeOut.ToUniversalTime();
 
-            return item;
-        }
+			var generatorNode = xmlDoc.SelectSingleNode("/atom:feed/atom:generator", NsManager);
+			atomFeed.Generator = generatorNode == null ? string.Empty : generatorNode.InnerText;
+		}
 
-        #endregion
+		private void ParseAtom10Items(IFeed feed, string xml)
+		{
+			var xmlDoc = new XmlDocument();
+			xmlDoc.LoadXml(xml);
+			var feedItemNodes = xmlDoc.SelectNodes("/atom:feed/atom:entry", NsManager);
+			foreach (XmlNode node in feedItemNodes)
+			{
+				feed.Items.Add(ParseAtom10SingleItem(node));
+			}
+		}
 
-        #region RSS 2.0 parsing methods
+		private BaseFeedItem ParseAtom10SingleItem(XmlNode itemNode)
+		{
+			var titleNode = itemNode.SelectSingleNode("atom:title", NsManager);
+			var datePublishedNode = itemNode.SelectSingleNode("atom:updated", NsManager);
+			var authorNode = itemNode.SelectSingleNode("atom:author/name", NsManager);
+			var idNode = itemNode.SelectSingleNode("atom:id", NsManager);
+			var contentNode = itemNode.SelectSingleNode("atom:content", NsManager);
+			var linkNode = itemNode.SelectSingleNode("atom:link/@href", NsManager);
 
-        private void ParseRss20Header(Rss20Feed rssFeed, string xml)
-        {
+			BaseFeedItem item = new Atom10FeedItem
+			{
+				Title = titleNode == null ? string.Empty : titleNode.InnerText,
+				DatePublished = datePublishedNode == null ? DateTime.UtcNow : SafeGetDate(datePublishedNode.InnerText),
+				Author = authorNode == null ? string.Empty : authorNode.InnerText,
+				Id = idNode == null ? string.Empty : idNode.InnerText,
+				Content = contentNode == null ? string.Empty : contentNode.InnerText,
+				Link = linkNode == null ? string.Empty : linkNode.InnerText
+			};
 
-            var xmlDoc = new XmlDocument();
-            xmlDoc.LoadXml(xml);
-            var titleNode = xmlDoc.SelectSingleNode("/rss/channel/title");
-            rssFeed.Title = titleNode.InnerText;
+			var categoryNodes = itemNode.SelectNodes("atom:category/atom:term", NsManager);
+			if (categoryNodes != null)
+			{
+				foreach (XmlNode categoryNode in categoryNodes)
+				{
+					item.Categories.Add(categoryNode.InnerText);
+				}
+			}
 
-            var descriptionNode = xmlDoc.SelectSingleNode("/rss/channel/description");
-            rssFeed.Description = descriptionNode == null ? string.Empty : descriptionNode.InnerText;
+			return item;
+		}
 
-            var linkNode = xmlDoc.SelectSingleNode("/rss/channel/link");
-            rssFeed.Link = linkNode == null ? string.Empty : linkNode.InnerText;
+		#endregion
 
-            var dateTimeNode = xmlDoc.SelectSingleNode("//pubDate[1]");
-            if (dateTimeNode == null) //We have to have a date, so we'll use the date/time when we polled the RSS feed as the default.
-            {
-                rssFeed.LastUpdated = DateTime.UtcNow;
-            }
-            else
-            {
-                DateTime timeOut;
-                DateTime.TryParse(dateTimeNode.InnerText, out timeOut);
-                rssFeed.LastUpdated = timeOut.ToUniversalTime();
-            }
+		#region RSS 2.0 parsing methods
 
-            var generatorNode = xmlDoc.SelectSingleNode("/rss/channel/generator");
-            rssFeed.Generator = generatorNode == null ? string.Empty : generatorNode.InnerText;
+		private void ParseRss20Header(Rss20Feed rssFeed, string xml)
+		{
 
-            var languageNode = xmlDoc.SelectSingleNode("/rss/channel/language");
-            rssFeed.Language = languageNode == null ? string.Empty : languageNode.InnerText;
-        }
+			var xmlDoc = new XmlDocument();
+			xmlDoc.LoadXml(xml);
+			var titleNode = xmlDoc.SelectSingleNode("/rss/channel/title");
+			rssFeed.Title = titleNode.InnerText;
 
-        private void ParseRss20Items(IFeed feed, string xml)
-        {
-            var xmlDoc = new XmlDocument();
-            xmlDoc.LoadXml(xml);
-            var feedItemNodes = xmlDoc.SelectNodes("/rss/channel/item");
-            foreach (XmlNode item in feedItemNodes)
-            {
-                feed.Items.Add(ParseRss20SingleItem(item));
-            }
-        }
+			var descriptionNode = xmlDoc.SelectSingleNode("/rss/channel/description");
+			rssFeed.Description = descriptionNode == null ? string.Empty : descriptionNode.InnerText;
 
-        private BaseFeedItem ParseRss20SingleItem(XmlNode itemNode)
-        {
-            var titleNode = itemNode.SelectSingleNode("title");
-            var datePublishedNode = itemNode.SelectSingleNode("pubDate");
-            var authorNode = itemNode.SelectSingleNode("author");
-            var commentsNode = itemNode.SelectSingleNode("comments");
-            var idNode = itemNode.SelectSingleNode("guid");
-            var contentNode = itemNode.SelectSingleNode("description");
-            var linkNode = itemNode.SelectSingleNode("link");
+			var linkNode = xmlDoc.SelectSingleNode("/rss/channel/link");
+			rssFeed.Link = linkNode == null ? string.Empty : linkNode.InnerText;
 
-            BaseFeedItem item = new Rss20FeedItem
-            {
-                Title = titleNode == null ? string.Empty : titleNode.InnerText,
-                DatePublished = datePublishedNode == null ? DateTime.UtcNow : SafeGetDate(datePublishedNode.InnerText),
-                Author = authorNode == null ? string.Empty : authorNode.InnerText,
-                Comments = commentsNode == null ? string.Empty : commentsNode.InnerText,
-                Id = idNode == null ? string.Empty : idNode.InnerText,
-                Content = contentNode == null ? string.Empty : contentNode.InnerText,
-                Link = linkNode == null ? string.Empty : linkNode.InnerText
-            };
+			var dateTimeNode = xmlDoc.SelectSingleNode("//pubDate[1]");
+			if (dateTimeNode == null) //We have to have a date, so we'll use the date/time when we polled the RSS feed as the default.
+			{
+				rssFeed.LastUpdated = DateTime.UtcNow;
+			}
+			else
+			{
+				DateTime timeOut;
+				DateTime.TryParse(dateTimeNode.InnerText, out timeOut);
+				rssFeed.LastUpdated = timeOut.ToUniversalTime();
+			}
 
-            var categoryNodes = itemNode.SelectNodes("category");
-            if (categoryNodes != null)
-            {
-                foreach (XmlNode categoryNode in categoryNodes)
-                {
-                    item.Categories.Add(categoryNode.InnerText);
-                }
-            }
+			var generatorNode = xmlDoc.SelectSingleNode("/rss/channel/generator");
+			rssFeed.Generator = generatorNode == null ? string.Empty : generatorNode.InnerText;
 
-            return item;
-        }
+			var languageNode = xmlDoc.SelectSingleNode("/rss/channel/language");
+			rssFeed.Language = languageNode == null ? string.Empty : languageNode.InnerText;
+		}
 
-        #endregion
-    }
+		private void ParseRss20Items(IFeed feed, string xml)
+		{
+			var xmlDoc = new XmlDocument();
+			xmlDoc.LoadXml(xml);
+			var feedItemNodes = xmlDoc.SelectNodes("/rss/channel/item");
+			foreach (XmlNode item in feedItemNodes)
+			{
+				feed.Items.Add(ParseRss20SingleItem(item));
+			}
+		}
+
+		private BaseFeedItem ParseRss20SingleItem(XmlNode itemNode)
+		{
+			var titleNode = itemNode.SelectSingleNode("title");
+			var datePublishedNode = itemNode.SelectSingleNode("pubDate");
+			var authorNode = itemNode.SelectSingleNode("author");
+			var commentsNode = itemNode.SelectSingleNode("comments");
+			var idNode = itemNode.SelectSingleNode("guid");
+			var contentNode = itemNode.SelectSingleNode("description");
+			var linkNode = itemNode.SelectSingleNode("link");
+
+			BaseFeedItem item = new Rss20FeedItem
+			{
+				Title = titleNode == null ? string.Empty : titleNode.InnerText,
+				DatePublished = datePublishedNode == null ? DateTime.UtcNow : SafeGetDate(datePublishedNode.InnerText),
+				Author = authorNode == null ? string.Empty : authorNode.InnerText,
+				Comments = commentsNode == null ? string.Empty : commentsNode.InnerText,
+				Id = idNode == null ? string.Empty : idNode.InnerText,
+				Content = contentNode == null ? string.Empty : contentNode.InnerText,
+				Link = linkNode == null ? string.Empty : linkNode.InnerText
+			};
+
+			var categoryNodes = itemNode.SelectNodes("category");
+			if (categoryNodes != null)
+			{
+				foreach (XmlNode categoryNode in categoryNodes)
+				{
+					item.Categories.Add(categoryNode.InnerText);
+				}
+			}
+
+			return item;
+		}
+
+		#endregion
+
+		#region RSS 0.92 parsing methods
+
+		private void ParseRss092Header(Rss092Feed rssFeed, string xml)
+		{
+
+			var xmlDoc = new XmlDocument();
+			xmlDoc.LoadXml(xml);
+			var titleNode = xmlDoc.SelectSingleNode("/rss/channel/title");
+			rssFeed.Title = titleNode.InnerText;
+
+			var descriptionNode = xmlDoc.SelectSingleNode("/rss/channel/description");
+			rssFeed.Description = descriptionNode == null ? string.Empty : descriptionNode.InnerText;
+
+			var linkNode = xmlDoc.SelectSingleNode("/rss/channel/link");
+			rssFeed.Link = linkNode == null ? string.Empty : linkNode.InnerText;
+
+			var dateTimeNode = xmlDoc.SelectSingleNode("//pubDate[1]");
+			if (dateTimeNode == null) //We have to have a date, so we'll use the date/time when we polled the RSS feed as the default.
+			{
+				rssFeed.LastUpdated = DateTime.UtcNow;
+			}
+			else
+			{
+				DateTime timeOut;
+				DateTime.TryParse(dateTimeNode.InnerText, out timeOut);
+				rssFeed.LastUpdated = timeOut.ToUniversalTime();
+			}
+
+			var generatorNode = xmlDoc.SelectSingleNode("/rss/channel/generator");
+			rssFeed.Generator = generatorNode == null ? string.Empty : generatorNode.InnerText;
+
+			var languageNode = xmlDoc.SelectSingleNode("/rss/channel/language");
+			rssFeed.Language = languageNode == null ? string.Empty : languageNode.InnerText;
+		}
+
+		private void ParseRss092Items(IFeed feed, string xml)
+		{
+			var xmlDoc = new XmlDocument();
+			xmlDoc.LoadXml(xml);
+			var feedItemNodes = xmlDoc.SelectNodes("/rss/channel/item");
+			foreach (XmlNode item in feedItemNodes)
+			{
+				feed.Items.Add(ParseRss092SingleItem(item));
+			}
+		}
+
+		private BaseFeedItem ParseRss092SingleItem(XmlNode itemNode)
+		{
+			var titleNode = itemNode.SelectSingleNode("title");
+			var datePublishedNode = itemNode.SelectSingleNode("pubDate");
+			var authorNode = itemNode.SelectSingleNode("author");
+			var commentsNode = itemNode.SelectSingleNode("comments");
+			var idNode = itemNode.SelectSingleNode("guid");
+			var contentNode = itemNode.SelectSingleNode("description");
+			var linkNode = itemNode.SelectSingleNode("link");
+
+			BaseFeedItem item = new Rss092FeedItem
+			{
+				Title = titleNode == null ? string.Empty : titleNode.InnerText,
+				DatePublished = datePublishedNode == null ? DateTime.UtcNow : SafeGetDate(datePublishedNode.InnerText),
+				Author = authorNode == null ? string.Empty : authorNode.InnerText,
+				Comments = commentsNode == null ? string.Empty : commentsNode.InnerText,
+				Id = idNode == null ? string.Empty : idNode.InnerText,
+				Content = contentNode == null ? string.Empty : contentNode.InnerText,
+				Link = linkNode == null ? string.Empty : linkNode.InnerText
+			};
+
+			var categoryNodes = itemNode.SelectNodes("category");
+			if (categoryNodes != null)
+			{
+				foreach (XmlNode categoryNode in categoryNodes)
+				{
+					item.Categories.Add(categoryNode.InnerText);
+				}
+			}
+
+			return item;
+		}
+
+		#endregion
+	}
 }
